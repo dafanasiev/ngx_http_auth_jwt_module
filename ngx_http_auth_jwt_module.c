@@ -343,7 +343,7 @@ static char* auth_jwt_key_from_file(ngx_conf_t* cf, const u_char* path, ngx_str_
 	key->len = st_size;
 	key->data = ngx_pcalloc(cf->pool, key->len);
 
-	if (ngx_read_fd(fd, key->data, key->len) != key->len)
+	if (ngx_read_fd(fd, key->data, key->len) != (ssize_t)key->len)
 	{
 		ngx_conf_log_error(NGX_LOG_ERR, cf, 0, "jwt_key file: unexpected end of file");
 		ngx_close_file(fd);
