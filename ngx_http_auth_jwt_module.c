@@ -516,8 +516,8 @@ static char* ngx_conf_set_auth_jwt(ngx_conf_t* cf, ngx_command_t* cmd, void* con
 		}
 	}
 
-	ngx_http_auth_jwt_main_conf_t* main = ngx_http_conf_get_module_main_conf(cf, ngx_http_auth_jwt_module);
-	main->enable = 1;
+	ngx_http_auth_jwt_main_conf_t* mconf = ngx_http_conf_get_module_main_conf(cf, ngx_http_auth_jwt_module);
+	mconf->enable = 1;
 	return NGX_CONF_OK;
 }
 
