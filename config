@@ -1,5 +1,8 @@
 ngx_addon_name=ngx_http_auth_jwt_module
 
+CORE_LIBS="$CORE_LIBS $LIBJWT_LIBS $JANSON_LIBS"
+CORE_INCS="$CORE_INCS $LIBJWT_INCS $JANSON_INCS"
+
 if [ $ngx_module_link = DYNAMIC ] ; then
     ngx_module_type=HTTP
     ngx_module_name=ngx_http_auth_jwt_module
@@ -9,7 +12,5 @@ if [ $ngx_module_link = DYNAMIC ] ; then
 elif [ $ngx_module_link = ADDON ] ; then
     HTTP_MODULES="$HTTP_MODULES ngx_http_auth_jwt_module"
     NGX_ADDON_SRCS="$NGX_ADDON_SRCS $ngx_addon_dir/ngx_http_auth_jwt_module.c"
-    CORE_LIBS="$CORE_LIBS $LIBJWT_LIBS $JANSON_LIBS"
-    CORE_INCS="$CORE_INCS $LIBJWT_INCS $JANSON_INCS"
     . auto/module
 fi
