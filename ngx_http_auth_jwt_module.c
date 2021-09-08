@@ -306,9 +306,10 @@ static char* ngx_http_auth_jwt_merge_loc_conf(ngx_conf_t* cf, void* parent, void
 // Convert an hexadecimal string to a binary string
 static int hex_to_binary(u_char* dest, u_char* src, const size_t n)
 {
+	size_t i;
 	u_char* p = &dest[0];
 	ngx_int_t dst;
-	for (size_t i = 0; i < n; i += 2) {
+	for (i = 0; i < n; i += 2) {
 		dst = ngx_hextoi(&src[i], 2);
 
 		if (dst == NGX_ERROR || dst > 255)
@@ -598,7 +599,8 @@ static ngx_int_t auth_jwt_get_token(u_char** token, ngx_http_request_t* r, const
 }
 
 static ngx_int_t ngx_http_auth_jwt_add_variables(ngx_conf_t* cf) {
-	for (ngx_http_variable_t* v = ngx_http_auth_jwt_variables; v->name.len; v++) {
+	ngx_http_variable_t* v;
+	for (v = ngx_http_auth_jwt_variables; v->name.len; v++) {
 		ngx_http_variable_t* var = ngx_http_add_variable(cf, &v->name, v->flags);
 		if (!var) return NGX_ERROR;
 		*var = *v;
