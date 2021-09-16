@@ -12,20 +12,17 @@ Based on https://github.com/RekGRpth/nginx-jwt-module
 Enables validation of JWT.
 
 ---
-    Syntax:	 auth_jwt_key value [encoding];
+    Syntax:	 auth_jwt_key value [encoding] [algos];
     Default: ——
     Context: http, server, location
 
 Specifies the key for validating JWT signature (must be hexadecimal).<br>
-The *encoding* option may be `hex | utf8 | base64 | file` (default is `utf8`).<br>
+The `encoding` option may be `hex | utf8 | base64 | file` (default is `utf8`).<br>
 The `file` option requires the *value* to be a valid file path (pointing to a PEM encoded key).
 
----
-    Syntax:	 auth_jwt_alg any | HS256 | HS384 | HS512 | RS256 | RS384 | RS512 | ES256 | ES384 | ES512;
-    Default: auth_jwt_alg any;
-    Context: http, server, location
-
-Specifies which algorithm the server expects to receive in the JWT.
+The `algos` options specifies which algorithms (defaults is `any`) the server expects to receive in the JWT (comma-separated string list). <br/>
+- Example: `"HS256,HS384,HS512"` <br/>
+- Supported: `any | HS256 | HS384 | HS512 | RS256 | RS384 | RS512 | ES256 | ES384 | ES512`<br/>
 
 ---
     Syntax:	 auth_jwt_bypass_methods GET | HEAD | POST | PUT | DELETE | MKCOL | COPY | MOVE | OPTIONS | PROPFIND | PROPPATCH | LOCK | UNLOCK | PATCH ...;
