@@ -10,6 +10,7 @@ typedef struct {
 } ngx_http_auth_jwt_main_conf_t;
 
 typedef struct {
+    ngx_uint_t jwt_bypass_methods;    //HTTP methods names mask
 	ngx_str_t jwt_key;          // Forwarded key (with auth_jwt_key)
 	ngx_int_t jwt_flag;         // Function of "auth_jwt": on -> 1 | off -> 0 | $variable -> 2
 	ngx_int_t jwt_var_index;    // Used only if jwt_flag==2 to fetch the $variable value
@@ -43,6 +44,31 @@ static ngx_conf_enum_t ngx_http_auth_jwt_algorithms[] = {
   { ngx_string("any"), JWT_ALG_ANY }
 };
 
+
+typedef struct {
+    u_char    *name;
+    uint32_t   method;
+} ngx_http_method_name_t;
+
+static ngx_http_method_name_t  ngx_methods_names[] = {
+        { (u_char *) "GET",       (uint32_t) NGX_HTTP_GET },
+        { (u_char *) "HEAD",      (uint32_t) NGX_HTTP_HEAD },
+        { (u_char *) "POST",      (uint32_t) NGX_HTTP_POST },
+        { (u_char *) "PUT",       (uint32_t) NGX_HTTP_PUT },
+        { (u_char *) "DELETE",    (uint32_t) NGX_HTTP_DELETE },
+        { (u_char *) "MKCOL",     (uint32_t) NGX_HTTP_MKCOL },
+        { (u_char *) "COPY",      (uint32_t) NGX_HTTP_COPY },
+        { (u_char *) "MOVE",      (uint32_t) NGX_HTTP_MOVE },
+        { (u_char *) "OPTIONS",   (uint32_t) NGX_HTTP_OPTIONS },
+        { (u_char *) "PROPFIND",  (uint32_t) NGX_HTTP_PROPFIND },
+        { (u_char *) "PROPPATCH", (uint32_t) NGX_HTTP_PROPPATCH },
+        { (u_char *) "LOCK",      (uint32_t) NGX_HTTP_LOCK },
+        { (u_char *) "UNLOCK",    (uint32_t) NGX_HTTP_UNLOCK },
+        { (u_char *) "PATCH",     (uint32_t) NGX_HTTP_PATCH },
+        //{ (u_char *) "*",  },
+        { NULL, 0 }
+};
+
 static ngx_int_t ngx_http_auth_jwt_handler(ngx_http_request_t* r);
 static ngx_int_t auth_jwt_get_token(u_char** token, ngx_http_request_t* r, const ngx_http_auth_jwt_loc_conf_t* conf);
 static char* auth_jwt_key_from_file(ngx_conf_t* cf, const u_char* path, ngx_str_t* key);
@@ -58,6 +84,7 @@ static char* ngx_http_auth_jwt_merge_loc_conf(ngx_conf_t* cf, void* parent, void
 // Declaration functions
 static char* ngx_conf_set_auth_jwt_key(ngx_conf_t* cf, ngx_command_t* cmd, void* conf);
 static char* ngx_conf_set_auth_jwt(ngx_conf_t* cf, ngx_command_t* cmd, void* conf);
+static char* ngx_conf_set_auth_jwt_bypass_methods(ngx_conf_t* cf, ngx_command_t* cmd, void* conf);
 
 static ngx_int_t ngx_http_auth_jwt_header_json(ngx_http_request_t* r, ngx_http_variable_value_t* v, uintptr_t data);
 static ngx_int_t ngx_http_auth_jwt_grant_json(ngx_http_request_t* r, ngx_http_variable_value_t* v, uintptr_t data);
@@ -71,7 +98,7 @@ static ngx_command_t ngx_http_auth_jwt_commands[] = {
 	  NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE12,
 	  ngx_conf_set_auth_jwt_key,
 	  NGX_HTTP_LOC_CONF_OFFSET,
-	  offsetof(ngx_http_auth_jwt_loc_conf_t, jwt_key),
+      offsetof(ngx_http_auth_jwt_loc_conf_t, jwt_key),
 	  NULL },
 
 	  // auth_jwt $variable | off | on;
@@ -79,7 +106,7 @@ static ngx_command_t ngx_http_auth_jwt_commands[] = {
 		NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
 		ngx_conf_set_auth_jwt,
 		NGX_HTTP_LOC_CONF_OFFSET,
-		offsetof(ngx_http_auth_jwt_loc_conf_t, jwt_flag),
+        0,
 		NULL },
 
 		// auth_jwt_alg HS256 | HS384 | HS512 | RS256 | RS384 | RS512 | ES256 | ES384 | ES512;
@@ -87,8 +114,16 @@ static ngx_command_t ngx_http_auth_jwt_commands[] = {
 		  NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
 		  ngx_conf_set_enum_slot,
 		  NGX_HTTP_LOC_CONF_OFFSET,
-		  offsetof(ngx_http_auth_jwt_loc_conf_t, jwt_algorithm),
+          offsetof(ngx_http_auth_jwt_loc_conf_t, jwt_algorithm),
 		  &ngx_http_auth_jwt_algorithms },
+
+		// auth_jwt_bypass_methods method1 [, ...];
+		{ ngx_string("auth_jwt_bypass_methods"),
+		  NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_1MORE,
+          ngx_conf_set_auth_jwt_bypass_methods,
+		  NGX_HTTP_LOC_CONF_OFFSET,
+          offsetof(ngx_http_auth_jwt_loc_conf_t, jwt_bypass_methods),
+		  NULL },
 
 		ngx_null_command
 };
@@ -165,6 +200,7 @@ ngx_module_t ngx_http_auth_jwt_module = {
 static ngx_int_t ngx_http_auth_jwt_handler(ngx_http_request_t* r)
 {
 	const ngx_http_auth_jwt_loc_conf_t* conf;
+    ngx_uint_t i;
 	u_char* jwt_data;
 	jwt_t* jwt = NULL;
 
@@ -176,11 +212,10 @@ static ngx_int_t ngx_http_auth_jwt_handler(ngx_http_request_t* r)
 		return NGX_DECLINED;
 	}
 
-	// Pass through options requests without token authentication
-	if (r->method == NGX_HTTP_OPTIONS)
-	{
-		return NGX_DECLINED;
-	}
+    // Pass through some requests without token authentication
+    if ((conf->jwt_bypass_methods & r->method) == r->method) {
+        return NGX_DECLINED;
+    }
 
 	// Get jwt
 	if (auth_jwt_get_token(&jwt_data, r, conf) != NGX_OK)
@@ -285,6 +320,7 @@ static void* ngx_http_auth_jwt_create_loc_conf(ngx_conf_t* cf)
 	conf->jwt_flag = NGX_CONF_UNSET;
 	conf->jwt_var_index = NGX_CONF_UNSET;
 	conf->jwt_algorithm = NGX_CONF_UNSET_UINT;
+	conf->jwt_bypass_methods = NGX_CONF_UNSET_UINT;
 
 	return conf;
 }
@@ -299,6 +335,7 @@ static char* ngx_http_auth_jwt_merge_loc_conf(ngx_conf_t* cf, void* parent, void
 	ngx_conf_merge_value(conf->jwt_var_index, prev->jwt_var_index, NGX_CONF_UNSET);
 	ngx_conf_merge_value(conf->jwt_flag, prev->jwt_flag, NGX_HTTP_AUTH_JWT_OFF);
 	ngx_conf_merge_uint_value(conf->jwt_algorithm, prev->jwt_algorithm, JWT_ALG_ANY);
+    ngx_conf_merge_uint_value(conf->jwt_bypass_methods, prev->jwt_bypass_methods, 0);
 
 	return NGX_CONF_OK;
 }
@@ -360,7 +397,7 @@ static char* auth_jwt_key_from_file(ngx_conf_t* cf, const u_char* path, ngx_str_
 // Parse auth_jwt_key directive
 static char* ngx_conf_set_auth_jwt_key(ngx_conf_t* cf, ngx_command_t* cmd, void* conf)
 {
-	ngx_str_t* key = conf;
+	ngx_str_t* key = (ngx_str_t*)(conf + cmd->offset);
 	ngx_str_t* value;
 	ngx_uint_t encoding;
 
@@ -462,6 +499,35 @@ static char* ngx_conf_set_auth_jwt_key(ngx_conf_t* cf, ngx_command_t* cmd, void*
 	return NGX_CONF_ERROR;
 }
 
+
+// Parse auth_jwt_bypass_methods
+static char* ngx_conf_set_auth_jwt_bypass_methods(ngx_conf_t* cf, ngx_command_t* cmd, void* conf) {
+    ngx_uint_t i;
+    ngx_str_t *value;
+    ngx_uint_t *jwt_bypass_methods = (ngx_uint_t *)(conf + cmd->offset);
+    ngx_http_method_name_t    *name;
+
+    *jwt_bypass_methods = 0;
+    value = cf->args->elts;
+    for (i = 1; i < cf->args->nelts; i++) {
+        for (name = ngx_methods_names; name->name; name++) {
+
+            if (ngx_strcasecmp(value[i].data, name->name) == 0) {
+                *jwt_bypass_methods |= name->method;
+                goto next;
+            }
+        }
+
+        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+                           "invalid method \"%V\"", &value[i]);
+        return NGX_CONF_ERROR;
+
+        next:
+        continue;
+    }
+
+    return NGX_CONF_OK;
+}
 
 // Parse auth_jwt directive
 static char* ngx_conf_set_auth_jwt(ngx_conf_t* cf, ngx_command_t* cmd, void* conf)
