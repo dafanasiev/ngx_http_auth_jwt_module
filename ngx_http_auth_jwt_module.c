@@ -15,6 +15,7 @@ typedef struct {
     ngx_int_t jwt_flag;         // Function of "auth_jwt": on -> 1 | off -> 0 | $variable -> 2
     ngx_int_t jwt_var_index;    // Used only if jwt_flag==2 to fetch the $variable value
     ngx_uint_t jwt_algorithm;   // allowed JWT_ALG_xxx bitmask
+    ngx_str_t jwt_kid;          // JWT kid of that key
 } ngx_http_auth_jwt_loc_conf_t;
 
 #define NGX_HTTP_AUTH_JWT_OFF        0
@@ -45,15 +46,15 @@ typedef struct {
  * Enum of accepted jwt algorithms
  */
 static ngx_http_auth_jwt_kvp_t ngx_http_auth_jwt_algorithms[] = {
-        {(u_char *) ("HS256"), (uint32_t) 1<<JWT_ALG_HS256},
-        {(u_char *) ("HS384"), (uint32_t) 1<<JWT_ALG_HS384},
-        {(u_char *) ("HS512"), (uint32_t) 1<<JWT_ALG_HS512},
-        {(u_char *) ("RS256"), (uint32_t) 1<<JWT_ALG_RS256},
-        {(u_char *) ("RS384"), (uint32_t) 1<<JWT_ALG_RS384},
-        {(u_char *) ("RS512"), (uint32_t) 1<<JWT_ALG_RS512},
-        {(u_char *) ("ES256"), (uint32_t) 1<<JWT_ALG_ES256},
-        {(u_char *) ("ES384"), (uint32_t) 1<<JWT_ALG_ES384},
-        {(u_char *) ("ES512"), (uint32_t) 1<<JWT_ALG_ES512},
+        {(u_char *) ("HS256"), (uint32_t) 1 << JWT_ALG_HS256},
+        {(u_char *) ("HS384"), (uint32_t) 1 << JWT_ALG_HS384},
+        {(u_char *) ("HS512"), (uint32_t) 1 << JWT_ALG_HS512},
+        {(u_char *) ("RS256"), (uint32_t) 1 << JWT_ALG_RS256},
+        {(u_char *) ("RS384"), (uint32_t) 1 << JWT_ALG_RS384},
+        {(u_char *) ("RS512"), (uint32_t) 1 << JWT_ALG_RS512},
+        {(u_char *) ("ES256"), (uint32_t) 1 << JWT_ALG_ES256},
+        {(u_char *) ("ES384"), (uint32_t) 1 << JWT_ALG_ES384},
+        {(u_char *) ("ES512"), (uint32_t) 1 << JWT_ALG_ES512},
         {(u_char *) ("any"),   (uint32_t) JWT_ALG_ANY},
         {NULL,                 (uint32_t) JWT_ALG_NONE}
 };
@@ -115,7 +116,7 @@ static ngx_command_t ngx_http_auth_jwt_commands[] = {
 
         // auth_jwt_key value [hex | base64 | utf8 | file] [HS256 | HS384 | HS512 | RS256 | RS384 | RS512 | ES256 | ES384 | ES512];
         {ngx_string("auth_jwt_key"),
-         NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE123,
+         NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1234,
          ngx_conf_set_auth_jwt_key,
          NGX_HTTP_LOC_CONF_OFFSET,
          0,
@@ -140,46 +141,48 @@ static ngx_command_t ngx_http_auth_jwt_commands[] = {
         ngx_null_command
 };
 
-static ngx_http_variable_t ngx_http_auth_jwt_variables[] = {{
-                                                                    ngx_string("jwt_header"),
-                                                                    NULL,
-                                                                    ngx_http_auth_jwt_header_json,
-                                                                    0,
-                                                                    NGX_HTTP_VAR_CHANGEABLE,
-                                                                    0
-                                                            },
-                                                            {
-                                                                    ngx_string("jwt_grant"),
-                                                                    NULL,
-                                                                    ngx_http_auth_jwt_grant_json,
-                                                                    0,
-                                                                    NGX_HTTP_VAR_CHANGEABLE,
-                                                                    0
-                                                            },
-                                                            {
-                                                                    ngx_string("jwt_header_"),
-                                                                    NULL,
-                                                                    ngx_http_auth_jwt_header_var,
-                                                                    0,
-                                                                    NGX_HTTP_VAR_CHANGEABLE | NGX_HTTP_VAR_PREFIX,
-                                                                    0
-                                                            },
-                                                            {
-                                                                    ngx_string("jwt_grant_"),
-                                                                    NULL,
-                                                                    ngx_http_auth_jwt_grant_var,
-                                                                    0,
-                                                                    NGX_HTTP_VAR_CHANGEABLE | NGX_HTTP_VAR_PREFIX,
-                                                                    0
-                                                            },
-                                                            {
-                                                                    ngx_null_string,
-                                                                    NULL,
-                                                                    NULL,
-                                                                    0,
-                                                                    0,
-                                                                    0
-                                                            }};
+static ngx_http_variable_t ngx_http_auth_jwt_variables[] = {
+        {
+                ngx_string("jwt_header"),
+                NULL,
+                ngx_http_auth_jwt_header_json,
+                0,
+                NGX_HTTP_VAR_CHANGEABLE,
+                0
+        },
+        {
+                ngx_string("jwt_grant"),
+                NULL,
+                ngx_http_auth_jwt_grant_json,
+                0,
+                NGX_HTTP_VAR_CHANGEABLE,
+                0
+        },
+        {
+                ngx_string("jwt_header_"),
+                NULL,
+                ngx_http_auth_jwt_header_var,
+                0,
+                NGX_HTTP_VAR_CHANGEABLE | NGX_HTTP_VAR_PREFIX,
+                0
+        },
+        {
+                ngx_string("jwt_grant_"),
+                NULL,
+                ngx_http_auth_jwt_grant_var,
+                0,
+                NGX_HTTP_VAR_CHANGEABLE | NGX_HTTP_VAR_PREFIX,
+                0
+        },
+        {
+                ngx_null_string,
+                NULL,
+                NULL,
+                0,
+                0,
+                0
+        },
+};
 
 
 static ngx_http_module_t ngx_http_auth_jwt_module_ctx = {
@@ -215,6 +218,7 @@ ngx_module_t ngx_http_auth_jwt_module = {
 
 static ngx_int_t ngx_http_auth_jwt_handler(ngx_http_request_t *r) {
     const ngx_http_auth_jwt_loc_conf_t *conf;
+    const ngx_str_t* conf_kid;
     ngx_uint_t i;
     u_char *jwt_data;
     jwt_t *jwt = NULL;
@@ -256,9 +260,28 @@ static ngx_int_t ngx_http_auth_jwt_handler(ngx_http_request_t *r) {
     // Validate the algorithm
     jwt_alg_t alg = jwt_get_alg(jwt);
     // Reject incoming token with a "none" algorithm, or, if auth_jwt_alg is set, those with a different one.
-    if (alg == JWT_ALG_NONE || (conf->jwt_algorithm & (1<<alg)) != (1<<alg)) {
+    if (alg == JWT_ALG_NONE || (conf->jwt_algorithm & (1 << alg)) != (1 << alg)) {
         ngx_log_error(NGX_LOG_WARN, r->connection->log, 0, "JWT: invalid algorithm in jwt: %d", jwt_get_alg(jwt));
         return NGX_HTTP_UNAUTHORIZED;
+    }
+
+    // Validate jwt kid field if set
+    conf_kid = &conf->jwt_kid;
+    if(conf_kid->len > 0) {
+        const char* jwt_kid_data = jwt_get_header(jwt, "kid");
+        if(!jwt_kid_data) {
+            ngx_log_error(NGX_LOG_WARN, r->connection->log, 0, "JWT: the jwt kid not present, but required");
+            return NGX_HTTP_UNAUTHORIZED;
+        }
+        const size_t jwt_kid_len = ngx_strlen(jwt_kid_data);
+        if(conf_kid->len != jwt_kid_len) {
+            ngx_log_error(NGX_LOG_WARN, r->connection->log, 0, "JWT: the jwt kid not matched (length)");
+            return NGX_HTTP_UNAUTHORIZED;
+        }
+        if(ngx_memn2cmp(conf_kid->data, (u_char *)jwt_kid_data, conf_kid->len, conf_kid->len) != 0) {
+            ngx_log_error(NGX_LOG_WARN, r->connection->log, 0, "JWT: the jwt kid not matched (content)");
+            return NGX_HTTP_UNAUTHORIZED;
+        }
     }
 
     // Validate the exp date of the JWT; Still valid if "exp" missing (exp == -1)
@@ -324,6 +347,7 @@ static void *ngx_http_auth_jwt_create_loc_conf(ngx_conf_t *cf) {
     conf->jwt_var_index = NGX_CONF_UNSET;
     conf->jwt_algorithm = NGX_CONF_UNSET_UINT;
     conf->jwt_bypass_methods = NGX_CONF_UNSET_UINT;
+    ngx_str_null(&conf->jwt_kid);
 
     return conf;
 }
@@ -338,6 +362,7 @@ static char *ngx_http_auth_jwt_merge_loc_conf(ngx_conf_t *cf, void *parent, void
     ngx_conf_merge_value(conf->jwt_flag, prev->jwt_flag, NGX_HTTP_AUTH_JWT_OFF);
     ngx_conf_merge_uint_value(conf->jwt_algorithm, prev->jwt_algorithm, JWT_ALG_ANY);
     ngx_conf_merge_uint_value(conf->jwt_bypass_methods, prev->jwt_bypass_methods, 0);
+    ngx_conf_merge_str_value(conf->jwt_kid, prev->jwt_kid, "");
 
     return NGX_CONF_OK;
 }
@@ -412,7 +437,7 @@ static char *ngx_conf_set_auth_jwt_key(ngx_conf_t *cf, ngx_command_t *cmd, void 
     if (cf->args->nelts == 2) {
         encoding = NGX_HTTP_AUTH_JWT_ENCODING_UTF8;
     }
-        // We can have (auth_jwt_key value [encoding | file] [HS256 | HS384 | HS512 | RS256 | RS384 | RS512 | ES256 | ES384 | ES512])
+    // We can have (auth_jwt_key $value $encoding [HS256 | HS384 | HS512 | RS256 | RS384 | RS512 | ES256 | ES384 | ES512] [kid])
     else if (cf->args->nelts >= 3) {
         if (ngx_strncmp(value[2].data, "file", 4) == 0) {
             const u_char *path = auth_jwt_safe_string(cf->pool, value[1].data, value[1].len);
@@ -428,8 +453,8 @@ static char *ngx_conf_set_auth_jwt_key(ngx_conf_t *cf, ngx_command_t *cmd, void 
             return NGX_CONF_ERROR;
         }
 
-        // we have (auth_jwt_key $encoding $alg)
-        if (cf->args->nelts == 4) {
+        // we have (auth_jwt_key $value $encoding $alg [kid])
+        if (cf->args->nelts >= 4) {
             ajlc->jwt_algorithm = JWT_ALG_NONE;
             const size_t lA = value[3].len;
             const char *pC = (char *) value[3].data;
@@ -445,7 +470,8 @@ static char *ngx_conf_set_auth_jwt_key(ngx_conf_t *cf, ngx_command_t *cmd, void 
                         }
                     }
 
-                    ngx_conf_log_error(NGX_LOG_ERR, cf, 0, "JWT: unknown/unsupported JWT algorithm in module configuration");
+                    ngx_conf_log_error(NGX_LOG_ERR, cf, 0,
+                                       "JWT: unknown/unsupported JWT algorithm in module configuration");
                     return NGX_CONF_ERROR;
                 }
 
@@ -453,8 +479,18 @@ static char *ngx_conf_set_auth_jwt_key(ngx_conf_t *cf, ngx_command_t *cmd, void 
                 ++i;
                 ++pC;
             } while (i <= lA);
+
+            // we have  (auth_jwt_key $value $encoding $alg $kid)
+            if(cf->args->nelts == 5) {
+                ajlc->jwt_kid.len = value[4].len;
+                ajlc->jwt_kid.data = value[4].data;
+            } else {
+                // no kid setup
+                ajlc->jwt_kid.len = 0;
+                ajlc->jwt_kid.data = NULL;
+            }
         } else {
-            // no one setup -> "any" by default
+            // no one alg setup -> "any" by default
             ajlc->jwt_algorithm = JWT_ALG_ANY;
         }
     } else {
