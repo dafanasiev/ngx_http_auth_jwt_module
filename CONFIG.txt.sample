@@ -1,0 +1,4 @@
+NGINX_PATH=/home/user/src/nginx
+LIBJWT_PATH=/home/user/src/libjwt
+LIBJANSSON_PATH=/home/user/src/jansson
+

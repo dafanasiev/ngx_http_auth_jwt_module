@@ -1,0 +1,4 @@
+.idea/
+cmake-build-*/
+CONFIG.txt
+nginx.config

@@ -32,31 +32,31 @@ typedef struct {
 } ngx_http_auth_jwt_kvp_t;
 
 #define JWT_ALG_NONE 0UL
-#define JWT_ALG_ANY ((uint32_t)((1<<JWT_ALG_HS256)|\
-                                (1<<JWT_ALG_HS384)|\
-                                (1<<JWT_ALG_HS512)|\
-                                (1<<JWT_ALG_RS256)|\
-                                (1<<JWT_ALG_RS384)|\
-                                (1<<JWT_ALG_RS512)|\
-                                (1<<JWT_ALG_ES256)|\
-                                (1<<JWT_ALG_ES384)|\
-                                (1<<JWT_ALG_ES512)))
+#define JWT_ALG_ANY ((uint32_t)((1UL<<(uint32_t)JWT_ALG_HS256)|\
+                                (1UL<<(uint32_t)JWT_ALG_HS384)|\
+                                (1UL<<(uint32_t)JWT_ALG_HS512)|\
+                                (1UL<<(uint32_t)JWT_ALG_RS256)|\
+                                (1UL<<(uint32_t)JWT_ALG_RS384)|\
+                                (1UL<<(uint32_t)JWT_ALG_RS512)|\
+                                (1UL<<(uint32_t)JWT_ALG_ES256)|\
+                                (1UL<<(uint32_t)JWT_ALG_ES384)|\
+                                (1UL<<(uint32_t)JWT_ALG_ES512)))
 
 /*
  * Enum of accepted jwt algorithms
  */
 static ngx_http_auth_jwt_kvp_t ngx_http_auth_jwt_algorithms[] = {
-        {(u_char *) ("HS256"), (uint32_t) 1 << JWT_ALG_HS256},
-        {(u_char *) ("HS384"), (uint32_t) 1 << JWT_ALG_HS384},
-        {(u_char *) ("HS512"), (uint32_t) 1 << JWT_ALG_HS512},
-        {(u_char *) ("RS256"), (uint32_t) 1 << JWT_ALG_RS256},
-        {(u_char *) ("RS384"), (uint32_t) 1 << JWT_ALG_RS384},
-        {(u_char *) ("RS512"), (uint32_t) 1 << JWT_ALG_RS512},
-        {(u_char *) ("ES256"), (uint32_t) 1 << JWT_ALG_ES256},
-        {(u_char *) ("ES384"), (uint32_t) 1 << JWT_ALG_ES384},
-        {(u_char *) ("ES512"), (uint32_t) 1 << JWT_ALG_ES512},
-        {(u_char *) ("any"),   (uint32_t) JWT_ALG_ANY},
-        {NULL,                 (uint32_t) JWT_ALG_NONE}
+        {(u_char *) ("HS256"), 1UL << (uint32_t)JWT_ALG_HS256},
+        {(u_char *) ("HS384"), 1UL << (uint32_t)JWT_ALG_HS384},
+        {(u_char *) ("HS512"), 1UL << (uint32_t)JWT_ALG_HS512},
+        {(u_char *) ("RS256"), 1UL << (uint32_t)JWT_ALG_RS256},
+        {(u_char *) ("RS384"), 1UL << (uint32_t)JWT_ALG_RS384},
+        {(u_char *) ("RS512"), 1UL << (uint32_t)JWT_ALG_RS512},
+        {(u_char *) ("ES256"), 1UL << (uint32_t)JWT_ALG_ES256},
+        {(u_char *) ("ES384"), 1UL << (uint32_t)JWT_ALG_ES384},
+        {(u_char *) ("ES512"), 1UL << (uint32_t)JWT_ALG_ES512},
+        {(u_char *) ("any"),   JWT_ALG_ANY},
+        {NULL,                 (uint32_t)JWT_ALG_NONE}
 };
 
 
@@ -219,7 +219,6 @@ ngx_module_t ngx_http_auth_jwt_module = {
 static ngx_int_t ngx_http_auth_jwt_handler(ngx_http_request_t *r) {
     const ngx_http_auth_jwt_loc_conf_t *conf;
     const ngx_str_t* conf_kid;
-    ngx_uint_t i;
     u_char *jwt_data;
     jwt_t *jwt = NULL;
 
@@ -260,7 +259,7 @@ static ngx_int_t ngx_http_auth_jwt_handler(ngx_http_request_t *r) {
     // Validate the algorithm
     jwt_alg_t alg = jwt_get_alg(jwt);
     // Reject incoming token with a "none" algorithm, or, if auth_jwt_alg is set, those with a different one.
-    if (alg == JWT_ALG_NONE || (conf->jwt_algorithm & (1 << alg)) != (1 << alg)) {
+    if (alg == JWT_ALG_NONE || (conf->jwt_algorithm & (1UL << (uint32_t)alg)) != (1UL << (uint32_t)alg)) {
         ngx_log_error(NGX_LOG_WARN, r->connection->log, 0, "JWT: invalid algorithm in jwt: %d", jwt_get_alg(jwt));
         return NGX_HTTP_UNAUTHORIZED;
     }
@@ -286,11 +285,18 @@ static ngx_int_t ngx_http_auth_jwt_handler(ngx_http_request_t *r) {
 
     // Validate the exp date of the JWT; Still valid if "exp" missing (exp == -1)
     time_t exp = (time_t) jwt_get_grant_int(jwt, "exp");
-    if (exp != -1 && exp < time(NULL)) {
+    if (exp >0 && exp < time(NULL)) {
         ngx_log_error(NGX_LOG_INFO, r->connection->log, 0, "JWT: the jwt has expired [exp=%ld]", (long) exp);
         return NGX_HTTP_UNAUTHORIZED;
     } else {
         ngx_http_set_ctx(r, jwt, ngx_http_auth_jwt_module);
+    }
+
+    // Validate the nbf date of the JWT
+    time_t nbf = (time_t) jwt_get_grant_int(jwt, "nbf");
+    if (nbf > 0 && nbf > time(NULL)) {
+        ngx_log_error(NGX_LOG_INFO, r->connection->log, 0, "JWT: the jwt has too new [nbf=%ld]", (long) nbf);
+        return NGX_HTTP_UNAUTHORIZED;
     }
 
     return NGX_OK;
@@ -354,6 +360,7 @@ static void *ngx_http_auth_jwt_create_loc_conf(ngx_conf_t *cf) {
 
 
 static char *ngx_http_auth_jwt_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child) {
+    (void)cf;   //ignore unused-parameter
     ngx_http_auth_jwt_loc_conf_t *prev = parent;
     ngx_http_auth_jwt_loc_conf_t *conf = child;
 
@@ -418,6 +425,7 @@ static char *auth_jwt_key_from_file(ngx_conf_t *cf, const u_char *path, ngx_str_
 
 // Parse auth_jwt_key directive
 static char *ngx_conf_set_auth_jwt_key(ngx_conf_t *cf, ngx_command_t *cmd, void *conf) {
+    (void)cmd;   //ignore unused-parameter
     ngx_http_auth_jwt_loc_conf_t *ajlc = (ngx_http_auth_jwt_loc_conf_t *) conf;
     ngx_str_t *key = &ajlc->jwt_key;
 
@@ -549,7 +557,7 @@ static char *ngx_conf_set_auth_jwt_key(ngx_conf_t *cf, ngx_command_t *cmd, void 
 static char *ngx_conf_set_auth_jwt_bypass_methods(ngx_conf_t *cf, ngx_command_t *cmd, void *conf) {
     ngx_uint_t i;
     ngx_str_t *value;
-    ngx_uint_t *jwt_bypass_methods = (ngx_uint_t *) (conf + cmd->offset);
+    ngx_uint_t *jwt_bypass_methods = (ngx_uint_t *) ((char*)conf + cmd->offset);
     ngx_http_auth_jwt_kvp_t *kvp;
 
     *jwt_bypass_methods = 0;
@@ -575,6 +583,7 @@ static char *ngx_conf_set_auth_jwt_bypass_methods(ngx_conf_t *cf, ngx_command_t 
 
 // Parse auth_jwt directive
 static char *ngx_conf_set_auth_jwt(ngx_conf_t *cf, ngx_command_t *cmd, void *conf) {
+    (void)cmd;   //ignore unused-parameter
     ngx_http_auth_jwt_loc_conf_t *ajcf = conf;
 
     ngx_int_t *flag = &ajcf->jwt_flag;
@@ -698,6 +707,7 @@ static ngx_int_t ngx_http_auth_jwt_add_variables(ngx_conf_t *cf) {
 }
 
 static ngx_int_t ngx_http_auth_jwt_header_json(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data) {
+    (void)data;   //ignore unused-parameter
     v->not_found = 1;
     jwt_t *jwt = ngx_http_get_module_ctx(r, ngx_http_auth_jwt_module);
     if (!jwt) return NGX_OK;
@@ -712,6 +722,7 @@ static ngx_int_t ngx_http_auth_jwt_header_json(ngx_http_request_t *r, ngx_http_v
 }
 
 static ngx_int_t ngx_http_auth_jwt_grant_json(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data) {
+    (void)data;   //ignore unused-parameter
     v->not_found = 1;
     jwt_t *jwt = ngx_http_get_module_ctx(r, ngx_http_auth_jwt_module);
     if (!jwt) return NGX_OK;
