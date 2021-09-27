@@ -1,6 +1,8 @@
 #include <ngx_config.h>
 #include <ngx_core.h>
 #include <ngx_http.h>
+#include <openssl/ec.h>
+#include <openssl/evp.h>
 
 //TODO: move consts to config
 #define MIN_INCOME_JWT_TOKEN_SIZE_BYTES (4U+1U+4U+1U+1U) // len(b64('{}')) + len('.')  +   len(b64('{}')) + len('.') + one_sig_byte
