@@ -14,8 +14,6 @@ else()
     add_compile_options(-Wall -Wextra -pedantic -Werror)
 endif()
 
-#find_library(LIBJWT_LIBRARY NAMES libjwt REQUIRED)
-
 add_library(${TARGET_NAME} ${LIBRARY_TYPE}
         ngx_http_auth_jwt_module.c
         ngx_http_auth_jwt_module_modules.g.c)
@@ -41,33 +39,16 @@ set(NGINX_INCLUDE_DIR
 set(NGINX_LIBRARY_DIR
         "${NGINX_PATH}/objs")
 
-set(LIBJWT_INCLUDE_DIR
-        "${LIBJWT_PATH}/include")
-
-set (LIBJWT_LIBRARY_DIR
-        "${LIBJWT_PATH}/build/libjwt")
-
-set (LIBJANSSON_INCLUDE_DIR
-        "${LIBJANSSON_PATH}/build/include")
-
-set (LIBJANSSON_LIBRARY_DIR
-        "${LIBJANSSON_PATH}/build/lib")
-
 target_include_directories(${TARGET_NAME} PUBLIC
         ${NGINX_INCLUDE_DIR}
-        ${LIBJWT_INCLUDE_DIR}
-        ${LIBJANSSON_INCLUDE_DIR}
         )
 
 target_link_directories(${TARGET_NAME} PUBLIC
         ${NGINX_LIBRARY_DIR}
-        ${LIBJWT_LIBRARY_DIR}
-        ${LIBJANSSON_LIBRARY_DIR}
         )
 
 target_link_libraries(${TARGET_NAME}
-        -ljwt
-        -ljansson
+        -lm
         )
 
 set_target_properties(${TARGET_NAME} PROPERTIES PREFIX "")

@@ -1,0 +1,30 @@
+From 4a226a9125ca324ba934509ca84a7c4cd32733b6 Mon Sep 17 00:00:00 2001
+From: Dmitry Afanasiev <afanasiev.dmitry@gmail.com>
+Date: Mon, 27 Sep 2021 16:13:07 +0300
+Subject: [PATCH] fix: support -Werror=unused-parameter
+
+---
+ json.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/json.c b/json.c
+index 1613b97..4a1ec62 100644
+--- a/json.c
++++ b/json.c
+@@ -93,11 +93,13 @@ typedef struct
+ 
+ static void * default_alloc (size_t size, int zero, void * user_data)
+ {
++   (void)user_data; //ignore unused-parameter warn
+    return zero ? calloc (1, size) : malloc (size);
+ }
+ 
+ static void default_free (void * ptr, void * user_data)
+ {
++   (void)user_data; //ignore unused-parameter warn
+    free (ptr);
+ }
+ 
+-- 
+2.33.0
+

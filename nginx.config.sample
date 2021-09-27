@@ -1,0 +1,37 @@
+worker_processes  1;
+daemon off;
+master_process off;
+
+pid /tmp/nginx.pid;
+
+load_module modules/ngx_http_auth_jwt_module.so;
+
+events {
+    worker_connections  1024;
+}
+
+error_log stderr debug;
+
+
+http {
+    client_body_temp_path /tmp;
+    proxy_temp_path /tmp;
+    fastcgi_temp_path /tmp;
+    uwsgi_temp_path /tmp;
+    scgi_temp_path /tmp;
+    access_log /tmp/access.log;
+
+	server {
+		listen       8088;
+
+        #auth_jwt_bypass_methods "OPTIONS";
+
+		location / {
+			auth_jwt on;
+			auth_jwt_key "123" utf8 "HS256" "blablakid";
+			auth_jwt_key "123" utf8 "HS256,HS384,HS512" "blablakiD";
+
+			proxy_pass http://example.com/;
+		}
+	}
+}

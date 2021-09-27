@@ -25,6 +25,9 @@ The `algos` options specifies which algorithms (defaults is `any`) the server ex
 
 The `kid`, if present, specifies which kid ([RFC7515: 4.1.4. "kid" (Key ID) Header Parameter](https://datatracker.ietf.org/doc/html/rfc7515#section-4.1.4)) the server expects to receive in the JWT.
 
+There could be several `auth_jwt_key` directives.
+These directives are inherited from the previous configuration level if and only if there are no `auth_jwt_key` directives defined on the current level.
+
 ---
     Syntax:	 auth_jwt_bypass_methods GET | HEAD | POST | PUT | DELETE | MKCOL | COPY | MOVE | OPTIONS | PROPFIND | PROPPATCH | LOCK | UNLOCK | PATCH ...;
     Default: ——
@@ -32,6 +35,9 @@ The `kid`, if present, specifies which kid ([RFC7515: 4.1.4. "kid" (Key ID) Head
     Example: auth_jwt_bypass_methods "GET" "OPTIONS" "HEAD" 
 
 Specifies HTTP methods that should be **bypassed** by module.
+
+These directives are inherited from the previous configuration level if and only if there are no `auth_jwt_bypass_methods` directives defined on the current level.
+
 
 ### Embedded Variables:
 
