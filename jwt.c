@@ -43,8 +43,10 @@ typedef struct {
     u_char sign_bytes[MAX_JWT_SIGN_SIZE_BYTES];
     size_t sign_bytes_len;
 
+#if OPENSSL_VERSION_NUMBER>=0x10100000L     //1.1.0+
     u_char *ecdsa_sign_bytes;  //fill in runtime when check ECkeys
     size_t ecdsa_sign_bytes_len;
+#endif
 } jwt_sign_wkp_t;
 
 typedef struct {
@@ -526,6 +528,7 @@ static int jwt_verify_sha_pem(ngx_http_request_t *r,
 
     /* Convert EC sigs back to ASN1. */
     if (key->jwt_key_evp_type == EVP_PKEY_EC) {
+#if OPENSSL_VERSION_NUMBER>=0x10100000L     //1.1.0+
         if (jwt_swkp->ecdsa_sign_bytes == NULL) {
             int degree, bn_len;
             unsigned char *p;
@@ -583,6 +586,10 @@ static int jwt_verify_sha_pem(ngx_http_request_t *r,
             sig = jwt_swkp->ecdsa_sign_bytes;
             sig_len = (int) jwt_swkp->ecdsa_sign_bytes_len;
         }
+#else
+        ngx_log_error(NGX_LOG_ALERT, r->connection->log, 0, "JWT: unable to check by EC keys - you openssl version id too old");
+        return EINVAL;
+#endif
     }
 
     EVP_MD_CTX *mdctx = EVP_MD_CTX_create();
