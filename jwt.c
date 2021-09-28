@@ -390,8 +390,10 @@ static ngx_int_t jwt_decode_sign(ngx_http_request_t *r,
 
     jwt_swkp->sign_bytes_len = jwt_decode_base64url(jwt_swkp->sign_bytes, jwt->sign_raw.data, jwt->sign_raw.len);
 
+#if OPENSSL_VERSION_NUMBER>=0x10100000L     //1.1.0+
     jwt_swkp->ecdsa_sign_bytes = NULL;
     jwt_swkp->ecdsa_sign_bytes_len = 0;
+#endif
 
     return NGX_OK;
 }
