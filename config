@@ -4,9 +4,11 @@ if [ $ngx_module_link = DYNAMIC ] ; then
     ngx_module_type=HTTP
     ngx_module_name=ngx_http_auth_jwt_module
     ngx_module_srcs="$ngx_addon_dir/ngx_http_auth_jwt_module.c"
+    ngx_module_libs="-lm"
     . auto/module
 elif [ $ngx_module_link = ADDON ] ; then
     HTTP_MODULES="$HTTP_MODULES ngx_http_auth_jwt_module"
     NGX_ADDON_SRCS="$NGX_ADDON_SRCS $ngx_addon_dir/ngx_http_auth_jwt_module.c"
+    CORE_LIBS="$CORE_LIBS -lm"
     . auto/module
 fi
