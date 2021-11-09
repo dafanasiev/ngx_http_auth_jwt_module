@@ -1,5 +1,6 @@
 #define json_char u_char
 #define json_int_t ngx_int_t
+#define JSON_INT_MAX NGX_MAX_INT_T_VALUE
 
 #include "json-parser/json.h"
 #include "json-parser/json.c"
