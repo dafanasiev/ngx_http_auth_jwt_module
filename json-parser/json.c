@@ -33,27 +33,41 @@
    #ifndef _CRT_SECURE_NO_WARNINGS
       #define _CRT_SECURE_NO_WARNINGS
    #endif
-   #include <stdint.h>
 #endif
-
-const struct _json_value json_value_none;
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <limits.h>
 #include <math.h>
+
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
+   /* C99 might give us uintptr_t and UINTPTR_MAX but they also might not be provided */
+   #include <stdint.h>
+#endif
+
+#ifndef JSON_INT_T_OVERRIDDEN
+   #if defined(_MSC_VER)
+      /* https://docs.microsoft.com/en-us/cpp/cpp/data-type-ranges */
+      #define JSON_INT_MAX 9223372036854775807LL
+   #elif defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
+      /* C99 */
+      #define JSON_INT_MAX INT_FAST64_MAX
+   #else
+      /* C89 */
+      #include <limits.h>
+      #define JSON_INT_MAX LONG_MAX
+   #endif
+#endif
+
+#ifndef JSON_INT_MAX
+#define JSON_INT_MAX (json_int_t)(((unsigned json_int_t)(-1)) / (unsigned json_int_t)2);
+#endif
 
 typedef unsigned int json_uchar;
 
-/* There has to be a better way to do this */
-static const json_int_t JSON_INT_MAX = sizeof(json_int_t) == 1
-                                       ? INT8_MAX
-                                       : (sizeof(json_int_t) == 2
-                                         ? INT16_MAX
-                                         : (sizeof(json_int_t) == 4
-                                           ? INT32_MAX
-                                           : INT64_MAX));
+const struct _json_value json_value_none;
 
 static unsigned char hex_value (json_char c)
 {
@@ -78,10 +92,7 @@ static int would_overflow (json_int_t value, json_char b)
 
 typedef struct
 {
-   unsigned long used_memory;
-
-   unsigned int uint_max;
-   unsigned long ulong_max;
+   size_t used_memory;
 
    json_settings settings;
    int first_pass;
@@ -93,19 +104,19 @@ typedef struct
 
 static void * default_alloc (size_t size, int zero, void * user_data)
 {
-   (void)user_data; //ignore unused-parameter warn
+   (void)user_data; /* ignore unused-parameter warn */
    return zero ? calloc (1, size) : malloc (size);
 }
 
 static void default_free (void * ptr, void * user_data)
 {
-   (void)user_data; //ignore unused-parameter warn
+   (void)user_data; /* ignore unused-parameter warn */
    free (ptr);
 }
 
-static void * json_alloc (json_state * state, unsigned long size, int zero)
+static void * json_alloc (json_state * state, size_t size, int zero)
 {
-   if ((state->ulong_max - state->used_memory) < size)
+   if ((ULONG_MAX - 8 - state->used_memory) < size)
       return 0;
 
    if (state->settings.max_memory
@@ -122,7 +133,7 @@ static int new_value (json_state * state,
                       json_type type)
 {
    json_value * value;
-   int values_size;
+   size_t values_size;
 
    if (!state->first_pass)
    {
@@ -156,7 +167,11 @@ static int new_value (json_state * state,
             values_size = sizeof (*value->u.object.values) * value->u.object.length;
 
             if (! (value->u.object.values = (json_object_entry *) json_alloc
-                  (state, values_size + ((unsigned long) value->u.object.values), 0)) )
+               #ifdef UINTPTR_MAX
+                  (state, values_size + ((uintptr_t) value->u.object.values), 0)) )
+               #else
+                  (state, values_size + ((size_t) value->u.object.values), 0)) )
+               #endif
             {
                return 0;
             }
@@ -247,8 +262,8 @@ json_value * json_parse_ex (json_settings * settings,
    json_value * top, * root, * alloc = 0;
    json_state state = { 0 };
    long flags = 0;
-   double num_digits = 0, num_e = 0;
-   double num_fraction = 0;
+   int num_digits = 0;
+   double num_e = 0, num_fraction = 0;
 
    /* Skip UTF-8 BOM
     */
@@ -270,12 +285,6 @@ json_value * json_parse_ex (json_settings * settings,
 
    if (!state.settings.mem_free)
       state.settings.mem_free = default_free;
-
-   memset (&state.uint_max, 0xFF, sizeof (state.uint_max));
-   memset (&state.ulong_max, 0xFF, sizeof (state.ulong_max));
-
-   state.uint_max -= 8; /* limit of how much can be added before next check */
-   state.ulong_max -= 8;
 
    for (state.first_pass = 1; state.first_pass >= 0; -- state.first_pass)
    {
@@ -300,7 +309,7 @@ json_value * json_parse_ex (json_settings * settings,
                goto e_failed;
             }
 
-            if (string_length > state.uint_max)
+            if (string_length > UINT_MAX - 8)
                goto e_overflow;
 
             if (flags & flag_escaped)
@@ -811,13 +820,15 @@ json_value * json_parse_ex (json_settings * settings,
                }
                else if (b == '.' && top->type == json_integer)
                {
+                  json_int_t integer = top->u.integer;
+
                   if (!num_digits)
                   {  sprintf (error, "%u:%u: Expected digit before `.`", line_and_col);
                      goto e_failed;
                   }
 
                   top->type = json_double;
-                  top->u.dbl = (double) top->u.integer;
+                  top->u.dbl = (double) integer;
 
                   flags |= flag_num_got_decimal;
                   num_digits = 0;
@@ -842,8 +853,9 @@ json_value * json_parse_ex (json_settings * settings,
 
                      if (top->type == json_integer)
                      {
+                        json_int_t integer = top->u.integer;
                         top->type = json_double;
-                        top->u.dbl = (double) top->u.integer;
+                        top->u.dbl = (double) integer;
                      }
 
                      num_digits = 0;
@@ -924,7 +936,7 @@ json_value * json_parse_ex (json_settings * settings,
                };
             }
 
-            if ( (++ top->parent->u.array.length) > state.uint_max)
+            if ( (++ top->parent->u.array.length) > UINT_MAX - 8)
                goto e_overflow;
 
             top = top->parent;
